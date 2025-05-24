@@ -21,11 +21,18 @@ def create_monitor(endpoint_sysId, testType, configurations, monitoringCriticali
         "Content-Type": "application/json",
         "Authorization": "Bearer " + more_api_key,
     }, json=payload)
-    
+
+    requestId = response.json().get("requestId")
     if response.status_code == 201:
-        return f"✅ Monitor created for `{endpoint_sysId}` with test type `{testType}`."
+        return f"Monitoring created for `{endpoint_sysId}` with test type `{testType}. Please track you application status using tracking Id : {requestId}`. Please check after some time to see the status of your request"
     else:
-        return f"❌ Failed to create monitor. Status: {response.status_code}, Error: {response.text}"
+        error_description = response.json().get("errorDescription", [])
+        if isinstance(error_description, list) and error_description:
+            error_message = error_description[0]
+        else:
+            error_message = str(error_description)
+
+        return f"Failed to create {testType} test to monitor {endpoint_sysId}. Error: {error_message}"
 
 def fetch_ba_level_information(baName: str, user_input: str, openai_client, app_key):
     db = connect_mongo()
@@ -57,7 +64,7 @@ def fetch_ba_level_information(baName: str, user_input: str, openai_client, app_
     if tool == "list_bams":
         return "\n".join(list_bams(ba_data))
     elif tool == "list_endpoints":
-        return "\n".join(list_endpoints(ba_data))
+        return list_endpoints(ba_data)
     elif tool == "summarize":
         return summarize_projection(ba_data)
     else:
@@ -141,7 +148,8 @@ def compare_endpoint_charges(endpoint_sysId1: str, endpoint_sysId2: str, openai_
                 "content": (
                     "You are a helpful assistant who will compare config of 2 test and explain why there is charge difference. "
                     "You will be given endpoints data where it will have test information of both endpoints in JSON format"
-                    "Configuration responsible for consumption or charges are interval,timeLimit and number of agents"
+                    "Configuration strictly responsible for consumption or charges are interval, timeLimit and number of agents assigned to the endpoint"
+                    "Do not consider any other configuration for charge comparison"
                     "So you have to answer back user in natural language why their one test is consuming more than the other"
                     "If you don't have answer, say you don't have enough information."
                 )
@@ -195,4 +203,40 @@ def fetch_agent_information(agentName: str, openai_client, app_key):
     ]   
 
     results = list(collection.aggregate(pipeline))
-    return results
+    # return results
+    formatted_results = [
+        f'testName: "{result["testName"]}", endpointSysId: "{result["endpointSysId"]}"\n'
+        for result in results
+    ]
+
+    return "\n".join(formatted_results)
+
+def fetch_request_status(requestId: str, openai_client, app_key):
+    print(requestId)
+    print("Fetching request status...")
+    response = requests.get(f"https://more-api-dev.cisco.com/api/v1/monitoringRequests/{requestId}/status", headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + more_api_key,
+    })
+    print(response)
+    testInformation = response.json()
+    print(testInformation)
+    response = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system",
+                "content": (
+                    "You are an assistant who analyzes JSON data to answer user questions based only on the fields in the input JSON called 'testInformation'.\n"
+                    "You must not output the entire JSON or mention 'testInformation' explicitly in your answers.\n"
+                    "Answer only what is asked, based on relevant fields in the input.\n"
+                    "For example:\n"
+                    "- If user asks 'What is the request status f363f15a...', find the 'status' field.\n"
+                    "- If user asks about the URL, find it under assets -> monitoringConfiguration -> url.\n"
+                    "- If asks about errors, find it under assetsStatusInThousandEyes -> errors.\n. If no errors then say 'No errors found in your request'\n"
+                    "If the question cannot be answered with available fields, say 'I don't have enough information to answer that.'"
+                )
+            },
+            {"role": "user", "content": f"Required information : {json.dumps(testInformation)}\n"}],
+        user=json.dumps({"appkey": app_key})
+    )
+    return response.choices[0].message.content

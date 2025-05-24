@@ -69,7 +69,7 @@ functions = [
     },
     {
         "name": "compare_endpoint_charges",
-        "description": "When user asks regarding charges or wants to know why one of my test is charged more than other test",
+        "description": "When user asks regarding charges or wants to know why one of my test is charged more than other test. Always ask user to provide two endpoint sysId do not consider anything which you know",
         "parameters": {
             "type": "object",
             "properties": {
@@ -97,6 +97,20 @@ functions = [
                 }
             },
             "required": ["agentName"]
+        }
+    },
+    {
+        "name": "fetch_request_status",
+        "description": "When user asks for the information regarding test status or test information which he has onboarded to monitor the application, you should return the only the information what user has asked based on the provided requestId or trackingId",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "requestId": {
+                    "type": "string",
+                    "description": "Tracking Id of the request which you want to get the information"
+                }
+            },
+            "required": ["requestId"]
         }
     }
 ]

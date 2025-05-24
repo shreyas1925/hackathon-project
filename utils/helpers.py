@@ -5,7 +5,14 @@ def list_endpoints(ba_data):
     eps = ba_data.get("endpoints", []) + [
         ep for bam in ba_data.get("bams", []) for ep in bam.get("endpoints", [])
     ]
-    return [ep['endpointSysId'] for ep in eps]
+    endpoint_list = [
+        f'endpointName: "{ep.get("endpointName", "")}", endpointSysId: "{ep.get("endpointSysId", "")}"'
+        for ep in eps
+    ]
+   
+    content = "\n\n".join(endpoint_list)
+    
+    return f"""Here are the list of monitored endpoints:\n\n{content}"""
 
 def summarize_projection(ba_data):
     total_eps = len(list_endpoints(ba_data))
