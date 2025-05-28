@@ -2,7 +2,7 @@ import json
 import requests
 from utils.mongo_loader import connect_mongo
 from utils.helpers import list_bams, list_endpoints, summarize_projection, extract_null_monitoring_endpoints
-from utils.monitoring_payload_utils import format_monitoring_payload
+from utils.monitoring_payload_utils import format_monitoring_payload, format_get_assets_payload
 from dotenv import load_dotenv
 import os
 from copy import deepcopy
@@ -312,4 +312,71 @@ def fetch_unmonitored_endpoints(baSysId, openai_client, app_key, user_input):
     output = "\n".join(formatted_results) 
     return output
     
+ # Update or insert the userID in the MongoDB collection 'clientIdToUserMapping' for the record with clientId="monoh-dev-integration".
+def set_user_id_in_mongo(userId):
+    try:
+        db = connect_mongo()
+        collection = db["clientIdToUserMapping"]
+        result = collection.update_one(
+            {"clientId": "monoh-dev-integration"},
+            {"$set": {"userId": userId}},
+            upsert=True
+        )
+        
+        if result.matched_count > 0:
+            return {"status": "success", "message": "User ID updated successfully in MongoDB."}
+        elif result.upserted_id:
+            return {"status": "success", "message": "User ID inserted successfully in MongoDB."}
+        else:
+            return {"status": "warning", "message": "No changes made to MongoDB."}
+    except Exception as e:
+        return {"status": "error", "message": f"An error occurred: {str(e)}"}
 
+# create a new tool to get the user assets list by calling the more api
+def fetch_user_assets(userId: str, openai_client, app_key, user_input: str):
+    print("Fetching user assets...")
+    print(f"User ID: {userId}")
+    if not userId:
+        return "❌ User CEC ID is required to fetch assets."
+
+    set_user_id_response = set_user_id_in_mongo(userId)
+    if set_user_id_response["status"] != "success":
+        return f"❌ Failed to set user ID in MongoDB: {set_user_id_response['message']}"
+    print(f"User ID set in MongoDB: {set_user_id_response['message']}")
+
+    # Prepare the payload for the more API
+    payload = format_get_assets_payload(
+        monitoring_goal_ids=["MonOH_AA", "MonOH_AN"],
+        enabled=True
+    )
+    print(f"Payload: {json.dumps(payload, indent=2)}")
+    # Set the user in the headers as auth-user
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + more_api_key,
+        "auth-user": userId
+    }
+    # Make a post request to the more API
+    response = requests.post("https://more-api-dev.cisco.com/api/v1/onboarding/assetsList/thousandEyes", headers=headers, json=payload)
+
+    # Handle response
+    if response.status_code == 200:
+        assets = response.json().get("data", [])
+        if not assets:
+            return f"ℹ️ No assets found for the user ID `{userId}`."
+
+        # Format asset data as a list of strings
+        asset_list = "\n".join(
+            [f"- BA Name: {asset.get('ciName', 'N/A')}, SysId: {asset.get('sysId', 'N/A')}" for asset in assets]
+        )
+
+        return f"✅ Assets associated with user `{userId}`:\n\n{asset_list}"
+
+    else:
+        error_description = response.json().get("errorDescription", [])
+        if isinstance(error_description, list) and error_description:
+            error_message = error_description[0]
+        else:
+            error_message = str(error_description)
+
+        return f"❌ Failed to fetch assets for user `{userId}`. Error: {error_message}"

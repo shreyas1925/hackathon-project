@@ -175,5 +175,19 @@ functions = [
             },
             "required": ["baSysId"]
         }
-    }
+    },
+    {
+        "name": "fetch_user_assets",
+        "description": "Fetches all the assets of the user which includes business applications",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "userId": {
+                    "type": "string",
+                    "description": "User CEC ID of the user whose assets are to be fetched"
+                }
+            },
+            "required": ["userId"]
+        }
+    },
 ]

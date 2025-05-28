@@ -7,7 +7,7 @@ from tools.tool_schema import functions
 from tools.tool_functions import (
     fetch_ba_level_information, fetch_endpoint_information,
     compare_endpoint_charges, fetch_agent_information, fetch_request_status,
-    fetch_unmonitored_endpoints,update_monitor,delete_monitor
+    fetch_unmonitored_endpoints,update_monitor,delete_monitor, fetch_user_assets
 )
 from langgraph_flow import build_monitor_flow  
 
@@ -112,15 +112,15 @@ if user_input:
     else:
         # LLM + function call
         base_system_msg = {
-            "role": "system",
-            "content": """You are MonitorEase, a helpful assistant that helps app owners and support engineers.
-            When the user asks to create a monitor, always map the test type to one of: HTTP, WebTransaction, Network, DNS, FTTP.
-            If the user says http, httptest, or similar, use HTTP. If unsure, ask the user to clarify.
-            If a user asks something unrelated, say:
-            "I'm sorry, I don't understand that request. Could you please rephrase or try something related to monitoring?"
-            Only call tools (functions) when the user intent matches your tool definitions."""
-        }
-
+                    "role": "system",
+                    "content": """You are MonitorEase, a helpful assistant that assists app owners and support engineers.
+                    When the user greets you with messages like "hi," "hello," or other generic greetings, respond politely and warmly. You can also engage in light, friendly conversation if the user initiates it, but always steer the discussion back to monitoring-related tasks when appropriate.
+                    When the user asks to create a monitor, always map the test type to one of: HTTP, WebTransaction, Network, DNS, FTTP.
+                    If the user says http, httptest, or similar, use HTTP. If unsure, ask the user to clarify.
+                    If a user asks something unrelated, say:
+                    "I'm sorry, I don't understand that request. Could you please rephrase or try something related to monitoring?"
+                    Only call tools (functions) when the user intent matches your tool definitions."""
+                }
         messages = [base_system_msg] + [
             {"role": role, "content": content} for role, content in chat_history[-10:]
         ]
@@ -166,7 +166,8 @@ if user_input:
                         "fetch_request_status": fetch_request_status,
                         "fetch_unmonitored_endpoints": fetch_unmonitored_endpoints,
                         "update_monitor": update_monitor,
-                        "delete_monitor": delete_monitor
+                        "delete_monitor": delete_monitor,
+                        "fetch_user_assets": fetch_user_assets
                     }
                     reply = tool_map.get(func_name, lambda **kwargs: "❌ Unsupported function.")(
                         **args, openai_client=client, app_key=app_key, user_input=user_input
