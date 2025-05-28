@@ -17,6 +17,7 @@ MonitorEase Assistant is a Streamlit-based AI-powered tool that assists applicat
 - 🔄 **LangGraph Flow**: Handles complex workflows like monitor creation with user confirmation.
 - 🛠️ **Tool Execution**: Dynamically calls backend functions based on user intent.
 - 🔒 **Secure Access**: Uses API keys and dotenv for environment security.
+- 📊 **LangSmith Integration**: Tracks and monitors LLM performance, logs user interactions, and provides insights into model behavior for debugging and optimization.
 
 ---
 
@@ -27,6 +28,7 @@ MonitorEase Assistant is a Streamlit-based AI-powered tool that assists applicat
 - **LLM**: Azure OpenAI (GPT-4o-mini)
 - **Environment Management**: Python-dotenv
 - **API Clients**: Requests
+- **Monitoring & Debugging**: LangSmith
 
 ---
 
@@ -48,7 +50,10 @@ MonitorEase Assistant is a Streamlit-based AI-powered tool that assists applicat
     OPENAI_API_KEY=your_azure_openai_api_key
     APP_KEY=your_application_key
     MORE_API_KEY=more_api_key
-    MORE_MONGO_URI=more_mongo_uri
+    MORE_MONGO_URI=more_dev_mongo_uri
+    LANGCHAIN_API_KEY=langSmith_api_key
+    LANGSMITH_PROJECT_NAME=your_project_name
+    LANGSMITH_API_URL=your_langsmith_api_url
     ```
 
 4. **Run the app**:
@@ -70,7 +75,6 @@ The assistant will respond or prompt for confirmation as needed.
 
 ---
 
-
 ## ✅ Supported Functions
 
 | Function                     | Description                                   |
@@ -89,6 +93,18 @@ The assistant will respond or prompt for confirmation as needed.
 
 - Ensure `.env` is not committed to version control.
 - Use secure vaults like Conjur for production secrets.
+
+---
+
+## 📊 LangSmith Integration
+
+LangSmith is integrated into MonitorEase Assistant to provide advanced monitoring and debugging capabilities for the LLM workflows. It enables:
+- **Performance Tracking**: Logs and monitors the performance of the GPT model during user interactions.
+- **Interaction Logging**: Captures user queries and assistant responses for analysis.
+- **Behavior Insights**: Helps identify issues in workflows and optimize model behavior.
+- **Debugging**: Provides tools to debug complex workflows and improve reliability.
+
+LangSmith integration ensures the assistant operates efficiently and provides actionable insights for continuous improvement.
 
 ---
 

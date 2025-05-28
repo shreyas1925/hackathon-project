@@ -2,6 +2,8 @@ from typing import TypedDict, List
 from langgraph.graph import StateGraph, END
 from agents.reflect_summary_agent import reflect_and_summarize
 from tools.tool_functions import create_monitor
+from langsmith import traceable
+
 
 class MonitorState(TypedDict, total=False):
     chat_history: List[dict]
@@ -15,10 +17,12 @@ def build_monitor_flow(openai_client):
 
     builder = StateGraph(MonitorState)
 
+    @traceable(name="Reflect & Summarize")
     def reflect(state: MonitorState) -> MonitorState:
         summary = reflect_and_summarize(openai_client, state["chat_history"])
         return {"summary": summary}
 
+    @traceable(name="Generate Confirmation Prompt")
     def confirm_summary(state: MonitorState) -> MonitorState:
         summary = state["summary"]
         print(summary)
@@ -27,6 +31,7 @@ def build_monitor_flow(openai_client):
             "confirmation_prompt": f"Here is what i understood:\n\n{summary}\n\nDo you want to proceed? (Yes/No)"
         }
 
+    @traceable(name="Create Monitor Resource")
     def create(state: MonitorState) -> MonitorState:
         args = state.get("monitor_args", {})
         result = create_monitor(**args)
