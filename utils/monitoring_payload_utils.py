@@ -192,3 +192,24 @@ def format_monitoring_payload(endpoint_sysId, monitoringCriticality, configurati
             }
         ]
     }
+
+def format_get_assets_payload(monitoring_goal_ids, enabled):
+    """
+    Formats the payload for the 'get assets' API request.
+
+    Args:
+        monitoring_goal_ids (list): A list of monitoring goal IDs.
+        enabled (bool): A flag indicating whether the assets are enabled.
+
+    Returns:
+        dict: The formatted payload.
+    """
+    if not isinstance(monitoring_goal_ids, list):
+        raise ValueError("monitoring_goal_ids must be a list.")
+    if not isinstance(enabled, bool):
+        raise ValueError("enabled must be a boolean.")
+
+    return {
+        "monitoringGoalIds": monitoring_goal_ids,
+        "enabled": enabled
+    }
