@@ -149,8 +149,8 @@ functions = [
         }
     },
     {
-        "name": "fetch_request_status",
-        "description": "When user asks for the information regarding test status or test information which he has onboarded to monitor the application, you should return the only the information what user has asked based on the provided requestId or trackingId",
+        "name": "fetch_newly_monitored_endpoint_configuration",
+        "description": "When user asks for the information regarding created test's configuration or updated test's configuration which he has newly monitored or newly updated to monitor the application call this schema, and you should return the only the information what user has asked based on the provided requestId or trackingId",
         "parameters": {
             "type": "object",
             "properties": {
