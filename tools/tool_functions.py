@@ -1,7 +1,7 @@
 import json
 import requests
 from utils.mongo_loader import connect_mongo
-from utils.helpers import list_bams, list_endpoints, summarize_projection, getAgentIdFromAgentName
+from utils.helpers import list_bams, list_endpoints, summarize_projection, extract_null_monitoring_endpoints
 from utils.monitoring_payload_utils import format_monitoring_payload
 from dotenv import load_dotenv
 import os
@@ -33,6 +33,64 @@ def create_monitor(endpoint_sysId, testType, configurations, monitoringCriticali
             error_message = str(error_description)
 
         return f"Failed to create {testType} test to monitor {endpoint_sysId}. Error: {error_message}"
+    
+def update_monitor(endpoint_sysId, testType, configurations, openai_client, app_key, user_input):
+    db = connect_mongo()
+    collection = db["assetsMonitoringConfiguration"]
+    existingEndpointData = collection.find_one({"data.cmdbId": endpoint_sysId})
+    monitoringCriticality = existingEndpointData.get("data", {}).get("monitoringCriticality", "5")
+    existingEndpointConfiguration = existingEndpointData.get("data", {}).get("thousandEyesConfiguration", {})
+ 
+    if not existingEndpointConfiguration:
+        return f"❌ No existing monitoring configuration found for endpoint `{endpoint_sysId}`. Please create a new monitor instead."
+    
+    # update the configurations with existing ones
+    configurations = {**existingEndpointConfiguration, **configurations}
+    payload = {
+        "assets": [
+            {
+                "sysIds": [endpoint_sysId],
+                "monitoringCriticality": monitoringCriticality,
+                "monitoringPlatform": "ThousandEyes",
+                "monitoringConfiguration": [configurations]
+            }
+        ]
+    }
+
+    response = requests.put("https://more-api-dev.cisco.com/api/v1/monitoringRequest/updateMonitoring", headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + more_api_key,
+    }, json=payload)
+
+    requestId = response.json().get("requestId")
+    if response.status_code == 201:
+        return f"Monitoring updated for `{endpoint_sysId}` with test type `{testType}. Please track you application status using tracking Id : {requestId}`. Please check after some time to see the status of your request"
+    else:
+        error_description = response.json().get("errorDescription", [])
+        if isinstance(error_description, list) and error_description:
+            error_message = error_description[0]
+        else:
+            error_message = str(error_description)
+
+        return f"Failed to update {testType} test to monitor {endpoint_sysId}. Error: {error_message}"
+
+def delete_monitor(endpoint_sysId, openai_client, app_key, user_input):
+    response = requests.delete(f"https://more-api-dev.cisco.com/api/v1/monitoringRequest/ci/{endpoint_sysId}?monitoringPlatform=ThousandEyes", headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + more_api_key,
+    })
+
+    if response.status_code == 202:
+        return f"Monitoring deleted for {endpoint_sysId}"
+    else:
+        error_description = response.json().get("errorDescription", [])
+        if isinstance(error_description, list) and error_description:
+            error_message = error_description[0]
+        else:
+            error_message = str(error_description)
+
+        return f"Failed to delete test which was monitoring {endpoint_sysId}. Error: {error_message}"
+
 
 def fetch_ba_level_information(baName: str, user_input: str, openai_client, app_key):
     db = connect_mongo()
@@ -136,7 +194,7 @@ def fetch_endpoint_information(endpoint_sysId: str, user_input: str, openai_clie
     )
     return response.choices[0].message.content
 
-def compare_endpoint_charges(endpoint_sysId1: str, endpoint_sysId2: str, openai_client, app_key):
+def compare_endpoint_charges(endpoint_sysId1: str, endpoint_sysId2: str, openai_client, app_key, user_input):
     db = connect_mongo()
     matched_endpoint1 = get_matched_endpoint(db, endpoint_sysId1)
     matched_endpoint2 = get_matched_endpoint(db, endpoint_sysId2)
@@ -159,7 +217,7 @@ def compare_endpoint_charges(endpoint_sysId1: str, endpoint_sysId2: str, openai_
     )
     return response.choices[0].message.content
     
-def fetch_agent_information(agentName: str, openai_client, app_key):
+def fetch_agent_information(agentName: str, openai_client, app_key, user_input):
 
     agentMapping = {
         "Cisco: San Jose, CA" :  251041,
@@ -186,7 +244,6 @@ def fetch_agent_information(agentName: str, openai_client, app_key):
         user=json.dumps({"appkey": app_key})
     )
     agentId = response.choices[0].message.content
-    print(agentId)
     db = connect_mongo()
     collection = db["brownfield-ba-data"]
 
@@ -211,14 +268,13 @@ def fetch_agent_information(agentName: str, openai_client, app_key):
 
     return "\n".join(formatted_results)
 
-def fetch_request_status(requestId: str, openai_client, app_key):
+def fetch_request_status(requestId: str, openai_client, app_key, user_input):
     print(requestId)
     print("Fetching request status...")
     response = requests.get(f"https://more-api-dev.cisco.com/api/v1/monitoringRequests/{requestId}/status", headers={
         "Content-Type": "application/json",
         "Authorization": "Bearer " + more_api_key,
     })
-    print(response)
     testInformation = response.json()
     print(testInformation)
     response = openai_client.chat.completions.create(
@@ -240,3 +296,20 @@ def fetch_request_status(requestId: str, openai_client, app_key):
         user=json.dumps({"appkey": app_key})
     )
     return response.choices[0].message.content
+
+def fetch_unmonitored_endpoints(baSysId, openai_client, app_key, user_input):
+    print(f"Fetching unmonitored endpoints for BA SysId: {baSysId}")
+    response = requests.post(f"https://more-api-dev.cisco.com/api/v1/onboarding/assetsDetails/{baSysId}", headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + more_api_key,
+    })
+    endpoints = extract_null_monitoring_endpoints(response.json())
+    formatted_results = [
+        f'endpointName: "{result["endpointName"]}", endpointSysId: "{result["endpointSysId"]}"\n'
+            for result in endpoints
+    ]
+
+    output = "\n".join(formatted_results) 
+    return output
+    
+

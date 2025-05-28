@@ -29,3 +29,46 @@ def getAgentIdFromAgentName(agentName):
         "Cisco: St. Leonards, Australia" : 251556
     }
     return agentMapping.get(agentName, None)
+
+def extract_null_monitoring_endpoints(api_response):
+    """
+    Extracts endpoints with monitoringConfigurationType: null from API response
+    
+    Args:
+        api_response (dict): The API response object containing assetDetails
+        
+    Returns:
+        list: List of endpoints with format [{"endpointName": "", "endpointSysId": ""}]
+    """
+    endpoints = []
+    
+    if not api_response or 'assetDetails' not in api_response:
+        return endpoints
+    
+    asset_details = api_response['assetDetails']
+    
+    # Extract endpoints from BAM -> App Instances -> Endpoints
+    if 'bam' in asset_details and isinstance(asset_details['bam'], list):
+        for bam in asset_details['bam']:
+            if 'appInstances' in bam and isinstance(bam['appInstances'], list):
+                for app_instance in bam['appInstances']:
+                    if 'appEndpoints' in app_instance and isinstance(app_instance['appEndpoints'], list):
+                        for endpoint in app_instance['appEndpoints']:
+                            if endpoint.get('monitoringConfigurationType') is None:
+                                endpoints.append({
+                                    'endpointName': endpoint.get('ciName', ''),
+                                    'endpointSysId': endpoint.get('sysId', '')
+                                })
+    
+    # Extract endpoints from direct App Instances under BA
+    if 'appInstances' in asset_details and isinstance(asset_details['appInstances'], list):
+        for app_instance in asset_details['appInstances']:
+            if 'appEndpoints' in app_instance and isinstance(app_instance['appEndpoints'], list):
+                for endpoint in app_instance['appEndpoints']:
+                    if endpoint.get('monitoringConfigurationType') is None:
+                        endpoints.append({
+                            'endpointName': endpoint.get('ciName', ''),
+                            'endpointSysId': endpoint.get('sysId', '')
+                        })
+    
+    return endpoints

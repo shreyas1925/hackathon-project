@@ -40,8 +40,57 @@ functions = [
         }
     },
     {
+        "name": "update_monitor",
+        "description": "Updates a thousandeyes test configuration for application/update monitored endpoint's configurations. Requires endpoint_sysId and testType, and optionally allows updating configurations. You should ask user what configuration you wants to update and then proceed",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "endpoint_sysId": {
+                    "type": "string",
+                    "description": "ID of the application to be monitored"
+                },
+                "testType": {
+                    "type": "string",
+                    "description": "Type of test to update. Must be one of: HTTP, WebTransaction, Network, DNS, FTTP."
+                },
+                "configurations": {
+                    "type": "object",
+                    "description": "Optional configurations to update for the test",
+                    "properties": {
+                        "interval": { "type": "integer", "description": "Polling interval in seconds" },
+                        "httpTimeLimit": { "type": "integer", "description": "Time limit for HTTP" },
+                        "timeLimit": { "type": "integer", "description": "Time limit for WebTransaction" },
+                        "fttpTimeLimit": { "type": "integer", "description": "Time limit for FTTP" },
+                        "url": { "type": "string", "description": "URL to monitor, do not ask while updating DNS Test but always ask for other tests" },
+                        "dnsServers": {
+                            "type": "array",
+                            "items": { "type": "string", "format": "ipv4" },
+                            "description": "DNS servers to use (only for DNS tests). Always considers each one as an array of strings separated by commas"
+                        },
+                        "domain": { "type": "string", "description": "Domain to monitor (only for DNS tests)" }
+                    }
+                }
+            },
+            "required": ["endpoint_sysId", "testType"]
+        }
+    },
+    {
+        "name": "delete_monitor",
+        "description": "Deletes a thousandeyes test configuration for the specified application. Requires endpoint_sysId to identify the test to delete.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "endpoint_sysId": {
+                    "type": "string",
+                    "description": "ID of the application whose test configuration is to be deleted"
+                }
+            },
+            "required": ["endpoint_sysId"]
+        }
+    },
+    {
         "name": "fetch_ba_level_information",
-        "description": "You should return configurations or information when asked by user regarding tests, endpoints, bams, consumptions",
+        "description": "You should return configurations or information when asked by user regarding tests, endpoints, bams, consumptions. You should always be get called when users asks for monitored endpoints under BA/Business Application",
         "parameters": {
             "type": "object",
             "properties": {
@@ -111,6 +160,20 @@ functions = [
                 }
             },
             "required": ["requestId"]
+        }
+    },
+    {
+        "name": "fetch_unmonitored_endpoints",
+        "description": "When user asks for the unmonitored endpoints for on BA, you should return the unmonitored endpoints.Stritctly this function should be called only when user asks for unmonitored endpoints",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "baSysId": {
+                    "type": "string",
+                    "description": "SysId of the business application to fetch unmonitored endpoints"
+                }
+            },
+            "required": ["baSysId"]
         }
     }
 ]
