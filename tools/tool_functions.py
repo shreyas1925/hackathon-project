@@ -6,10 +6,13 @@ from utils.monitoring_payload_utils import format_monitoring_payload, format_get
 from dotenv import load_dotenv
 import os
 from copy import deepcopy
+from langsmith import traceable
+
 
 load_dotenv()
 more_api_key = os.getenv("MORE_API_KEY")
 
+@traceable(name="Create Monitor")
 def create_monitor(endpoint_sysId, testType, configurations, monitoringCriticality):
     payload = format_monitoring_payload(
         endpoint_sysId=endpoint_sysId,
@@ -33,11 +36,16 @@ def create_monitor(endpoint_sysId, testType, configurations, monitoringCriticali
             error_message = str(error_description)
 
         return f"Failed to create {testType} test to monitor {endpoint_sysId}. Error: {error_message}"
-    
+
+@traceable(name="Update Monitor")   
 def update_monitor(endpoint_sysId, testType, configurations, openai_client, app_key, user_input):
     db = connect_mongo()
     collection = db["assetsMonitoringConfiguration"]
     existingEndpointData = collection.find_one({"data.cmdbId": endpoint_sysId})
+
+    if not existingEndpointData:
+        return f"❌ No existing monitoring configuration found for endpoint `{endpoint_sysId}`. Please create a new monitor instead."
+
     monitoringCriticality = existingEndpointData.get("data", {}).get("monitoringCriticality", "5")
     existingEndpointConfiguration = existingEndpointData.get("data", {}).get("thousandEyesConfiguration", {})
  
@@ -74,13 +82,14 @@ def update_monitor(endpoint_sysId, testType, configurations, openai_client, app_
 
         return f"Failed to update {testType} test to monitor {endpoint_sysId}. Error: {error_message}"
 
+@traceable(name="Delete Monitor")
 def delete_monitor(endpoint_sysId, openai_client, app_key, user_input):
     response = requests.delete(f"https://more-api-dev.cisco.com/api/v1/monitoringRequest/ci/{endpoint_sysId}?monitoringPlatform=ThousandEyes", headers={
         "Content-Type": "application/json",
         "Authorization": "Bearer " + more_api_key,
     })
 
-    if response.status_code == 202:
+    if response.status_code == 202 or response.status_code == 204:
         return f"Monitoring deleted for {endpoint_sysId}"
     else:
         error_description = response.json().get("errorDescription", [])
@@ -91,11 +100,14 @@ def delete_monitor(endpoint_sysId, openai_client, app_key, user_input):
 
         return f"Failed to delete test which was monitoring {endpoint_sysId}. Error: {error_message}"
 
-
+@traceable(name="Fetch BA Level Information")
 def fetch_ba_level_information(baName: str, user_input: str, openai_client, app_key):
     db = connect_mongo()
     collection = db["brownfield-ba-data"]
     ba_data = collection.find_one({"baName": baName})
+
+    if not ba_data:
+        return f"❌ No data found for Business Application `{baName}`."
     
     # Let LLM decide the intent and target
     intent_response = openai_client.chat.completions.create(
@@ -128,6 +140,7 @@ def fetch_ba_level_information(baName: str, user_input: str, openai_client, app_
     else:
         return "Sorry, at this point of time I do not support this request"
 
+@traceable(name="Get Matched Endpoint")
 def get_matched_endpoint(db, endpoint_sysId):
     collection = db["brownfield-ba-data"]
 
@@ -173,6 +186,7 @@ def get_matched_endpoint(db, endpoint_sysId):
     matched_endpoint["source"] = source 
     return matched_endpoint
 
+@traceable(name="Fetch Endpoint Information")
 def fetch_endpoint_information(endpoint_sysId: str, user_input: str, openai_client, app_key):
     db = connect_mongo()
     matched_endpoint = get_matched_endpoint(db, endpoint_sysId)
@@ -194,6 +208,7 @@ def fetch_endpoint_information(endpoint_sysId: str, user_input: str, openai_clie
     )
     return response.choices[0].message.content
 
+@traceable(name="Compare Endpoint Charges")
 def compare_endpoint_charges(endpoint_sysId1: str, endpoint_sysId2: str, openai_client, app_key, user_input):
     db = connect_mongo()
     matched_endpoint1 = get_matched_endpoint(db, endpoint_sysId1)
@@ -216,7 +231,8 @@ def compare_endpoint_charges(endpoint_sysId1: str, endpoint_sysId2: str, openai_
         user=json.dumps({"appkey": app_key})
     )
     return response.choices[0].message.content
-    
+
+@traceable(name="Fetch Agent Information")
 def fetch_agent_information(agentName: str, openai_client, app_key, user_input):
 
     agentMapping = {
@@ -268,6 +284,7 @@ def fetch_agent_information(agentName: str, openai_client, app_key, user_input):
 
     return "\n".join(formatted_results)
 
+@traceable(name="Fetch Request Status")
 def fetch_request_status(requestId: str, openai_client, app_key, user_input):
     print(requestId)
     print("Fetching request status...")
@@ -297,6 +314,7 @@ def fetch_request_status(requestId: str, openai_client, app_key, user_input):
     )
     return response.choices[0].message.content
 
+@traceable(name="Fetch Unmonitored Endpoints")
 def fetch_unmonitored_endpoints(baSysId, openai_client, app_key, user_input):
     print(f"Fetching unmonitored endpoints for BA SysId: {baSysId}")
     response = requests.post(f"https://more-api-dev.cisco.com/api/v1/onboarding/assetsDetails/{baSysId}", headers={
@@ -313,6 +331,8 @@ def fetch_unmonitored_endpoints(baSysId, openai_client, app_key, user_input):
     return output
     
  # Update or insert the userID in the MongoDB collection 'clientIdToUserMapping' for the record with clientId="monoh-dev-integration".
+
+@traceable(name="Set User ID in MongoDB")
 def set_user_id_in_mongo(userId):
     try:
         db = connect_mongo()
@@ -333,6 +353,7 @@ def set_user_id_in_mongo(userId):
         return {"status": "error", "message": f"An error occurred: {str(e)}"}
 
 # create a new tool to get the user assets list by calling the more api
+@traceable(name="Fetch User Assets")
 def fetch_user_assets(userId: str, openai_client, app_key, user_input: str):
     print("Fetching user assets...")
     print(f"User ID: {userId}")
