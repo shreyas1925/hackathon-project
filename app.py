@@ -6,8 +6,8 @@ from openai import AzureOpenAI
 from tools.tool_schema import functions
 from tools.tool_functions import (
     fetch_ba_level_information, fetch_endpoint_information,
-    compare_endpoint_charges, fetch_agent_information, fetch_request_status,
-    fetch_unmonitored_endpoints,update_monitor,delete_monitor, fetch_user_assets
+    compare_endpoint_charges, fetch_agent_information, fetch_newly_monitored_endpoint_configuration,
+    fetch_unmonitored_endpoints,update_monitor,delete_monitor, fetch_user_assets, create_monitor
 )
 from langgraph_flow import build_monitor_flow  
 
@@ -93,7 +93,7 @@ for role, content in chat_history:
 
 # Chat Input
 user_input = st.chat_input("Ask me to create a monitor or list monitors...")
-monitor_flow = build_monitor_flow(client)
+
 if user_input:
     chat_history.append(("user", user_input))
     with st.chat_message("user"):
@@ -102,13 +102,13 @@ if user_input:
     # Handle LangGraph confirmation input
     if st.session_state.awaiting_confirmation:
         st.session_state.langgraph_state["user_confirmation"] = user_input.strip().lower()
-        result_state = monitor_flow.invoke(st.session_state.langgraph_state)
+        result_state = st.session_state.monitor_flow.invoke(st.session_state.langgraph_state)
 
         if result_state.get("user_confirmation", "").lower() == "yes":
             st.chat_message("assistant").markdown(result_state["result"])
             chat_history.append(("assistant", result_state["result"]))
         else:
-            cancel_msg = "Okay, monitor creation is cancelled. Please go on and ask for any queries"
+            cancel_msg = "Okay, monitor action is cancelled. Please go on and ask for any queries"
             st.chat_message("assistant").markdown(cancel_msg)
             chat_history.append(("assistant", cancel_msg))
 
@@ -172,7 +172,7 @@ if user_input:
         messages = [base_system_msg] + [
             {"role": role, "content": content} for role, content in chat_history[-10:]
         ]
-        print(f"Messages for LLM: {messages}")
+
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
@@ -186,37 +186,49 @@ if user_input:
             st.chat_message("assistant").markdown(message.content)
             chat_history.append(("assistant", message.content))
 
+        tool_map = {
+            "fetch_ba_level_information": fetch_ba_level_information,
+            "fetch_endpoint_information": fetch_endpoint_information,
+            "compare_endpoint_charges": compare_endpoint_charges,
+            "fetch_agent_information": fetch_agent_information,
+            "fetch_newly_monitored_endpoint_configuration": fetch_newly_monitored_endpoint_configuration,
+            "fetch_unmonitored_endpoints": fetch_unmonitored_endpoints,
+            "update_monitor": update_monitor,
+            "delete_monitor": delete_monitor,
+            "create_monitor": create_monitor,
+            "fetch_user_assets": fetch_user_assets
+        }
         # Handle function calls
         if message.function_call:
             try:
                 args = json.loads(message.function_call.arguments)
                 func_name = message.function_call.name
 
-                if func_name == "create_monitor":
+                if func_name in {"create_monitor", "update_monitor", "delete_monitor"}:
+                    tool_function = tool_map[func_name]
+                    monitor_flow = build_monitor_flow(client, tool_function, func_name)
+                    st.session_state.monitor_flow = monitor_flow
+
                     st.session_state.langgraph_state = {
                         "chat_history": messages,
                         "monitor_args": args,
                     }
                     result_state = monitor_flow.invoke(st.session_state.langgraph_state)
-                    confirmation_prompt = result_state.get("confirmation_prompt", "Proceed? (Yes/No)")
 
-                    st.session_state.awaiting_confirmation = True
-                    st.chat_message("assistant").markdown(confirmation_prompt)
-                    chat_history.append(("assistant", confirmation_prompt))
+                    # Show review message if present
+                    if "result" in result_state:
+                        st.chat_message("assistant").markdown(result_state["result"])
+                        chat_history.append(("assistant", result_state["result"]))
+
+                    # Show confirmation prompt if present
+                    if "confirmation_prompt" in result_state:
+                        confirmation_prompt = result_state["confirmation_prompt"]
+                        st.session_state.awaiting_confirmation = True
+                        st.chat_message("assistant").markdown(confirmation_prompt)
+                        chat_history.append(("assistant", confirmation_prompt))
 
                 else:
                     # Map and call other tools
-                    tool_map = {
-                        "fetch_ba_level_information": fetch_ba_level_information,
-                        "fetch_endpoint_information": fetch_endpoint_information,
-                        "compare_endpoint_charges": compare_endpoint_charges,
-                        "fetch_agent_information": fetch_agent_information,
-                        "fetch_request_status": fetch_request_status,
-                        "fetch_unmonitored_endpoints": fetch_unmonitored_endpoints,
-                        "update_monitor": update_monitor,
-                        "delete_monitor": delete_monitor,
-                        "fetch_user_assets": fetch_user_assets
-                    }
                     reply = tool_map.get(func_name, lambda **kwargs: "❌ Unsupported function.")(
                         **args, openai_client=client, app_key=app_key, user_input=user_input
                     )

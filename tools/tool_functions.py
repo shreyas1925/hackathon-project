@@ -38,7 +38,7 @@ def create_monitor(endpoint_sysId, testType, configurations, monitoringCriticali
         return f"Failed to create {testType} test to monitor {endpoint_sysId}. Error: {error_message}"
 
 @traceable(name="Update Monitor")   
-def update_monitor(endpoint_sysId, testType, configurations, openai_client, app_key, user_input):
+def update_monitor(endpoint_sysId, testType, configurations):
     db = connect_mongo()
     collection = db["assetsMonitoringConfiguration"]
     existingEndpointData = collection.find_one({"data.cmdbId": endpoint_sysId})
@@ -83,7 +83,7 @@ def update_monitor(endpoint_sysId, testType, configurations, openai_client, app_
         return f"Failed to update {testType} test to monitor {endpoint_sysId}. Error: {error_message}"
 
 @traceable(name="Delete Monitor")
-def delete_monitor(endpoint_sysId, openai_client, app_key, user_input):
+def delete_monitor(endpoint_sysId):
     response = requests.delete(f"https://more-api-dev.cisco.com/api/v1/monitoringRequest/ci/{endpoint_sysId}?monitoringPlatform=ThousandEyes", headers={
         "Content-Type": "application/json",
         "Authorization": "Bearer " + more_api_key,
@@ -284,29 +284,26 @@ def fetch_agent_information(agentName: str, openai_client, app_key, user_input):
 
     return "\n".join(formatted_results)
 
-@traceable(name="Fetch Request Status")
-def fetch_request_status(requestId: str, openai_client, app_key, user_input):
-    print(requestId)
-    print("Fetching request status...")
+@traceable(name="Fetch newly monitored endpoint configuration")
+def fetch_newly_monitored_endpoint_configuration(requestId: str, openai_client, app_key, user_input):
     response = requests.get(f"https://more-api-dev.cisco.com/api/v1/monitoringRequests/{requestId}/status", headers={
         "Content-Type": "application/json",
         "Authorization": "Bearer " + more_api_key,
     })
     testInformation = response.json()
-    print(testInformation)
     response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system",
                 "content": (
-                    "You are an assistant who analyzes JSON data to answer user questions based only on the fields in the input JSON called 'testInformation'.\n"
-                    "You must not output the entire JSON or mention 'testInformation' explicitly in your answers.\n"
                     "Answer only what is asked, based on relevant fields in the input.\n"
                     "For example:\n"
-                    "- If user asks 'What is the request status f363f15a...', find the 'status' field.\n"
                     "- If user asks about the URL, find it under assets -> monitoringConfiguration -> url.\n"
-                    "- If asks about errors, find it under assetsStatusInThousandEyes -> errors.\n. If no errors then say 'No errors found in your request'\n"
-                    "If the question cannot be answered with available fields, say 'I don't have enough information to answer that.'"
+                    "- If user asks regarding configuration or test settings, find it under assets -> monitoringConfiguration.\n"
+                    "- If user asks about the request status (e.g., 'What is the request status <id>'), find the 'status' field.\n"
+                    "- If asks about errors, find it under assetsStatusInThousandEyes -> errors. If no errors then say 'No errors found in your request'\n"
+                    "- While answering, do not repeat the user question instead phrase your answer in a way that directly addresses the user's query.\n"
+                    "Important: If the user query includes both a request ID and configuration/test context (e.g., 'What configuration was used for request <id>'), do **not** return the status. Return the monitoringConfiguration instead.\n"
                 )
             },
             {"role": "user", "content": f"Required information : {json.dumps(testInformation)}\n"}],
