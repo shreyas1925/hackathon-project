@@ -118,7 +118,7 @@ functions = [
     },
     {
         "name": "compare_endpoint_charges",
-        "description": "When user asks regarding charges or wants to know why one of my test is charged more than other test. Always ask user to provide two endpoint sysId do not consider anything which you know",
+        "description": "When user asks regarding charges or wants to know why one of my test is charged more than other test. Always ask user to provide two endpoint sysId do not consider anything which you know. Endpoint sysId's should be in format endpoint_syId1 and endpoint_sysId2",
         "parameters": {
             "type": "object",
             "properties": {
